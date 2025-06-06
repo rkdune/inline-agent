@@ -309,13 +309,6 @@ export default function TextEditor() {
               </div>
             )
           )}
-
-          {/* Help text - only show when no content */}
-          {content.length === 0 && !isProcessing && (
-            <div className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm shadow-lg animate-fade-in">
-              Type <span className="paradigm-trigger">@Paradigm</span> anywhere to get instant AI research assistance
-            </div>
-          )}
         </div>
       </div>
     </div>
