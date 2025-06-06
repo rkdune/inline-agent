@@ -68,6 +68,16 @@ export default function TextEditor() {
       setIsProcessing(true)
       setError(null)
 
+      // Save current cursor position before processing
+      let currentCursorPosition = 0
+      if (editorRef.current) {
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          currentCursorPosition = range.startOffset
+        }
+      }
+
       // Extract context around the trigger
       const context = extractContext(content, targetTrigger.position)
       
@@ -81,10 +91,24 @@ export default function TextEditor() {
 
       setContent(newContent)
       
-      // Update editor content and cursor position
+      // Update editor content and preserve cursor position intelligently
       if (editorRef.current) {
-        // Save cursor position relative to the replacement
-        const newCursorPosition = targetTrigger.position + result.length
+        // Calculate the difference in length due to replacement
+        const lengthDifference = result.length - targetTrigger.text.length
+        
+        // Determine where cursor should be after replacement
+        let newCursorPosition
+        
+        if (currentCursorPosition <= targetTrigger.position) {
+          // Cursor was before the trigger - keep it in the same place
+          newCursorPosition = currentCursorPosition
+        } else if (currentCursorPosition >= targetTrigger.position + targetTrigger.text.length) {
+          // Cursor was after the trigger - adjust by the length difference
+          newCursorPosition = currentCursorPosition + lengthDifference
+        } else {
+          // Cursor was within the trigger text - place it after the replacement
+          newCursorPosition = targetTrigger.position + result.length
+        }
         
         // Update the content
         editorRef.current.textContent = newContent
@@ -96,7 +120,7 @@ export default function TextEditor() {
         // Find the correct text node and position
         const textNode = editorRef.current.firstChild
         if (textNode && textNode.textContent) {
-          const targetPosition = Math.min(newCursorPosition, textNode.textContent.length)
+          const targetPosition = Math.min(Math.max(0, newCursorPosition), textNode.textContent.length)
           range.setStart(textNode, targetPosition)
           range.setEnd(textNode, targetPosition)
           selection?.removeAllRanges()
@@ -275,6 +299,44 @@ export default function TextEditor() {
             data-placeholder="Start typing your document... Use @Paradigm to trigger AI research assistance."
             suppressContentEditableWarning={true}
           />
+          
+          {/* GitHub icon at bottom left */}
+          <a 
+            href="https://github.com/rkdune/inline-agent" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="absolute bottom-4 left-4 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+            title="View source on GitHub"
+          >
+            <svg 
+              width="20" 
+              height="20" 
+              viewBox="0 0 24 24" 
+              fill="currentColor"
+              className="opacity-60 hover:opacity-80 transition-opacity duration-200"
+            >
+              <path d="M12 0C5.374 0 0 5.373 0 12 0 17.302 3.438 21.8 8.207 23.387c.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+            </svg>
+          </a>
+          
+          {/* Figma icon next to GitHub */}
+          <a 
+            href="YOUR_PNG_URL_HERE" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="absolute bottom-4 left-10 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+            title="the figma mockup that started this!"
+          >
+            <svg 
+              width="20" 
+              height="20" 
+              viewBox="0 0 24 24" 
+              fill="currentColor"
+              className="opacity-60 hover:opacity-80 transition-opacity duration-200"
+            >
+              <path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.02s-1.354-3.02-3.019-3.02h-3.117v6.04zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.49S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.02s1.354 3.02 3.019 3.02h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.02s1.354 3.02 3.019 3.02h3.117v-6.04H8.148zM8.172 24c-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.563 4.539zm-.024-7.51a3.023 3.023 0 0 0-3.019 3.019c0 1.665 1.365 3.019 3.044 3.019 1.705 0 3.093-1.376 3.093-3.068v-2.97H8.148z"/>
+            </svg>
+          </a>
         </div>
 
         {/* Bottom status indicators */}

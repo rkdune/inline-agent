@@ -23,38 +23,64 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'OpenAI API key not configured' });
     }
 
-    // System prompt for contextual research
-    const systemPrompt = `You are a research assistant that provides concise, factual information to complete sentences. 
+    // Create input prompt for web search
+    const inputPrompt = `Analyze this context and provide ONLY the specific information needed to replace @Paradigm. Search the web for current information if needed.
 
-When given a context with @Paradigm, analyze what specific information is needed and provide ONLY that information - no explanations, no extra text, no quotation marks.
-
-Examples:
-- "Sony was founded in @Paradigm" → 1946
-- "The current CEO of Tesla is @Paradigm" → Elon Musk  
-- "Apple's latest iPhone @Paradigm features" → 15
-- "The population of Tokyo is @Paradigm" → 13.96 million
-- "USA landed on the moon in @Paradigm" → 1969
+Context: "${context}"
 
 Rules:
 1. Return only the specific fact/data needed to complete the sentence
 2. Do NOT use quotation marks around your response
-3. Use current, accurate information when possible - search the web if needed
+3. Use current, accurate information - search the web for recent data
 4. Be concise - typically 1-5 words
-5. Only return "[unclear context]" if the sentence is genuinely incomprehensible or the request is completely ambiguous
-6. Try to infer the most likely meaning from context even if it's not perfect`;
+5. Only return "[unclear context]" if the request is genuinely incomprehensible
 
-    // Call OpenAI API with standard GPT-4o model
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Context: "${context}"` }
-      ],
-      max_tokens: 50,
-      temperature: 0.1
-    });
+Examples:
+- "Sony was founded in @Paradigm" → 1946
+- "The current CEO of Tesla is @Paradigm" → Elon Musk  
+- "Apple's latest iPhone @Paradigm features" → 15 Pro Max
+- "The population of Tokyo is @Paradigm" → 13.96 million`;
 
-    const result = completion.choices[0]?.message?.content?.trim();
+    let result;
+
+    try {
+      // Try using Responses API with web search first
+      const response = await openai.responses.create({
+        model: "gpt-4o",
+        input: inputPrompt,
+        tools: [{ type: "web_search_preview" }],
+        tool_choice: { type: "web_search_preview" },
+        temperature: 0.1
+      });
+
+      // Extract result from response
+      if (response.output && response.output_text) {
+        result = response.output_text.trim();
+      } else if (response.choices && response.choices[0]?.message?.content) {
+        result = response.choices[0].message.content.trim();
+      } else {
+        throw new Error('No valid response format');
+      }
+
+    } catch (webSearchError) {
+      console.log('Web search failed, falling back to regular GPT-4o:', webSearchError.message);
+      
+      // Fallback to regular Chat Completions API
+      const fallbackResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { 
+            role: "system", 
+            content: `You are a research assistant that provides concise, factual information to complete sentences. When given a context with @Paradigm, analyze what specific information is needed and provide ONLY that information - no explanations, no extra text, no quotation marks.`
+          },
+          { role: "user", content: inputPrompt }
+        ],
+        max_tokens: 50,
+        temperature: 0.1
+      });
+
+      result = fallbackResponse.choices[0]?.message?.content?.trim();
+    }
 
     if (!result) {
       return res.status(500).json({ error: 'No response from AI' });
