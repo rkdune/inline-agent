@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  html, body {
+    @apply h-full font-sans;
+  }
+  
+  body {
+    @apply bg-gray-100 text-gray-900;
+  }
+}
+
+@layer components {
+  .paradigm-trigger {
+    @apply bg-paradigm-100 text-paradigm-700 px-1 rounded-sm transition-all duration-200;
+  }
+  
+  .paradigm-trigger-active {
+    @apply bg-paradigm-500 text-white shadow-sm animate-pulse-slow;
+  }
+  
+  .loading-indicator {
+    @apply inline-block w-3 h-3 bg-paradigm-500 rounded-full animate-pulse;
+  }
+  
+  .document-page {
+    @apply bg-white rounded-lg shadow-lg border border-gray-200;
+    min-height: 800px;
+    max-width: 210mm; /* A4 width */
+    margin: 0 auto;
+  }
+  
+  .document-editor {
+    @apply w-full h-full bg-transparent border-0 outline-none resize-none;
+    @apply text-gray-900 leading-relaxed;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 800px;
+  }
+  
+  .document-editor:focus {
+    @apply outline-none ring-0;
+  }
+  
+  /* Contenteditable placeholder */
+  [contenteditable]:empty:before {
+    content: attr(data-placeholder);
+    color: #9CA3AF;
+    pointer-events: none;
+  }
+  
+  [contenteditable]:focus:before {
+    content: none;
+  }
+} 
