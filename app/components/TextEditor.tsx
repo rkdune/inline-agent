@@ -2,6 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 
+// Configurable trigger word - change this to modify the trigger
+const TRIGGER_WORD = 'fill'
+const TRIGGER_SYMBOL = '@'
+const FULL_TRIGGER = `${TRIGGER_SYMBOL}${TRIGGER_WORD}`
+
 interface ParadigmTrigger {
   position: number
   text: string
@@ -23,13 +28,13 @@ export default function TextEditor() {
     setDarkMode(prev => !prev)
   }, [])
 
-  // Detect @Paradigm triggers in the text
+  // Detect trigger word in the text
   const detectTriggers = useCallback((text: string): ParadigmTrigger[] => {
-    const paradigmRegex = /@paradigm/gi
+    const triggerRegex = new RegExp(`${TRIGGER_SYMBOL}${TRIGGER_WORD}`, 'gi')
     const detectedTriggers: ParadigmTrigger[] = []
     let match
 
-    while ((match = paradigmRegex.exec(text)) !== null) {
+    while ((match = triggerRegex.exec(text)) !== null) {
       detectedTriggers.push({
         position: match.index,
         text: match[0],
@@ -68,7 +73,7 @@ export default function TextEditor() {
     return data.result
   }, [])
 
-  // Process @Paradigm trigger with AI (by trigger object directly)
+  // Process trigger with AI (by trigger object directly)
   const processTriggerDirect = useCallback(async (targetTrigger: ParadigmTrigger) => {
     try {
       setIsProcessing(true)
@@ -182,7 +187,7 @@ export default function TextEditor() {
     }
   }, [content, extractContext, researchContext])
 
-  // Process @Paradigm trigger with AI
+  // Process trigger with AI
   const processTrigger = useCallback(async (triggerIndex: number) => {
     const trigger = triggers[triggerIndex]
     if (!trigger || trigger.isProcessing) return
@@ -202,7 +207,7 @@ export default function TextEditor() {
       // Get AI research result
       const result = await researchContext(context)
       
-      // Replace @Paradigm with the result
+      // Replace trigger with the result
       const beforeTrigger = content.slice(0, trigger.position)
       const afterTrigger = content.slice(trigger.position + trigger.text.length)
       const newContent = beforeTrigger + result + afterTrigger
@@ -256,12 +261,12 @@ export default function TextEditor() {
     const newTriggers = detectTriggers(newContent)
     
     setTriggers(prev => {
-      // Check if any trigger became complete (fully matches @paradigm)
+      // Check if any trigger became complete (fully matches the trigger word)
       const newCompleteTriggers = newTriggers.filter(trigger => {
-        const isComplete = trigger.text.toLowerCase() === '@paradigm'
+        const isComplete = trigger.text.toLowerCase() === FULL_TRIGGER.toLowerCase()
         const wasNotComplete = !prev.some(prevTrigger => 
           prevTrigger.position === trigger.position && 
-          prevTrigger.text.toLowerCase() === '@paradigm'
+          prevTrigger.text.toLowerCase() === FULL_TRIGGER.toLowerCase()
         )
         return isComplete && wasNotComplete
       })
@@ -283,7 +288,7 @@ export default function TextEditor() {
     
     // Set timeout to clear typing state
     setTimeout(() => setIsTyping(false), 1000)
-  }, [detectTriggers, processTriggerDirect])
+  }, [detectTriggers, processTriggerDirect, FULL_TRIGGER])
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -357,7 +362,7 @@ export default function TextEditor() {
               lineHeight: '1.6',
               caretColor: '#0ea5e9',
             }}
-            data-placeholder="Start typing your document... Use @Paradigm to trigger AI research assistance."
+            data-placeholder={`Start typing your document... Use ${FULL_TRIGGER} to trigger AI research assistance.`}
             suppressContentEditableWarning={true}
           />
           

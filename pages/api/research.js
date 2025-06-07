@@ -24,22 +24,24 @@ export default async function handler(req, res) {
     }
 
     // Create input prompt for web search
-    const inputPrompt = `Analyze this context and provide ONLY the specific information needed to replace @Paradigm. Search the web for current information if needed.
+    const inputPrompt = `Analyze this context and provide ONLY the specific information needed to replace @fill. Search the web for current information if needed.
 
 Context: "${context}"
 
 Rules:
-1. Return only the specific fact/data needed to complete the sentence
+1. Return ONLY the specific fact/data needed to complete the sentence
 2. Do NOT use quotation marks around your response
-3. Use current, accurate information - search the web for recent data
+3. Use current, accurate information search the web if necessary for recent data
 4. Be concise - typically 1-5 words
 5. Only return "[unclear context]" if the request is genuinely incomprehensible
+6. Make sure your response fits in the sentence grammatically (i.e. put articles/commas/etc if necessary)
+7. NEVER restate the question in your response, just return what's necessary.
 
 Examples:
-- "Sony was founded in @Paradigm" → 1946
-- "The current CEO of Tesla is @Paradigm" → Elon Musk  
-- "Apple's latest iPhone @Paradigm features" → 15 Pro Max
-- "The population of Tokyo is @Paradigm" → 13.96 million`;
+- "Sony was founded in @fill" → 1946
+- "The current CEO of Tesla is @fill" → Elon Musk  
+- "Apple's latest iPhone @fill features" → 15 Pro Max
+- "The population of Tokyo is @fill" → 13.96 million`;
 
     let result;
 
@@ -49,7 +51,7 @@ Examples:
         model: "gpt-4o",
         input: inputPrompt,
         tools: [{ type: "web_search_preview" }],
-        tool_choice: { type: "web_search_preview" },
+        // tool_choice: { type: "web_search_preview" },
         temperature: 0.1
       });
 
@@ -71,7 +73,7 @@ Examples:
         messages: [
           { 
             role: "system", 
-            content: `You are a research assistant that provides concise, factual information to complete sentences. When given a context with @Paradigm, analyze what specific information is needed and provide ONLY that information - no explanations, no extra text, no quotation marks.`
+            content: `You are a research assistant that provides concise, factual information to complete sentences. When given a context with @fill, analyze what specific information is needed and provide ONLY that information - no explanations, no extra text, no quotation marks.`
           },
           { role: "user", content: inputPrompt }
         ],
