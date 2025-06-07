@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Paradigm Docs - AI Research Assistant',
+  title: 'Inline Agent',
   description: 'Transform any text editor into an intelligent writing companion with @Paradigm triggers',
   keywords: ['AI', 'research', 'assistant', 'writing', 'productivity'],
   authors: [{ name: 'Paradigm Team' }],

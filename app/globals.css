@@ -47,7 +47,7 @@
     @apply outline-none ring-0;
   }
   
-  /* Contenteditable placeholder */
+  /* Contenteditable placeholder - Light mode */
   [contenteditable]:empty:before {
     content: attr(data-placeholder);
     color: #9CA3AF;
@@ -56,5 +56,10 @@
   
   [contenteditable]:focus:before {
     content: none;
+  }
+
+  /* Dark mode placeholder styling */
+  .dark [contenteditable]:empty:before {
+    color: #6B7280;
   }
 } 

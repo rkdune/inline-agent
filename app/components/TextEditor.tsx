@@ -12,10 +12,16 @@ interface ParadigmTrigger {
 export default function TextEditor() {
   const [content, setContent] = useState('')
   const [triggers, setTriggers] = useState<ParadigmTrigger[]>([])
+  const [darkMode, setDarkMode] = useState(false)
   const editorRef = useRef<HTMLDivElement>(null)
   const [isTyping, setIsTyping] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Toggle dark mode
+  const toggleDarkMode = useCallback(() => {
+    setDarkMode(prev => !prev)
+  }, [])
 
   // Detect @Paradigm triggers in the text
   const detectTriggers = useCallback((text: string): ParadigmTrigger[] => {
@@ -68,13 +74,19 @@ export default function TextEditor() {
       setIsProcessing(true)
       setError(null)
 
-      // Save current cursor position before processing
-      let currentCursorPosition = 0
+      // Save current cursor position and selection
+      let currentSelection: { start: number; end: number } | null = null
       if (editorRef.current) {
         const selection = window.getSelection()
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0)
-          currentCursorPosition = range.startOffset
+          // Get cursor position relative to the entire text content
+          const preCaretRange = range.cloneRange()
+          preCaretRange.selectNodeContents(editorRef.current)
+          preCaretRange.setEnd(range.startContainer, range.startOffset)
+          const start = preCaretRange.toString().length
+          const end = start + range.toString().length
+          currentSelection = { start, end }
         }
       }
 
@@ -84,47 +96,81 @@ export default function TextEditor() {
       // Get AI research result
       const result = await researchContext(context)
       
-      // Replace @Paradigm with the result
+      // Create new content by surgically replacing only the trigger
       const beforeTrigger = content.slice(0, targetTrigger.position)
       const afterTrigger = content.slice(targetTrigger.position + targetTrigger.text.length)
       const newContent = beforeTrigger + result + afterTrigger
+      
+      // Calculate length difference for cursor adjustment
+      const lengthDifference = result.length - targetTrigger.text.length
 
+      // Update React state
       setContent(newContent)
       
-      // Update editor content and preserve cursor position intelligently
-      if (editorRef.current) {
-        // Calculate the difference in length due to replacement
-        const lengthDifference = result.length - targetTrigger.text.length
+      // Use a simple but effective approach: only update if we have a clean single text node
+      if (editorRef.current && currentSelection) {
+        // Simple approach: update the content and restore cursor
+        const originalTextContent = editorRef.current.textContent || ''
         
-        // Determine where cursor should be after replacement
-        let newCursorPosition
-        
-        if (currentCursorPosition <= targetTrigger.position) {
-          // Cursor was before the trigger - keep it in the same place
-          newCursorPosition = currentCursorPosition
-        } else if (currentCursorPosition >= targetTrigger.position + targetTrigger.text.length) {
-          // Cursor was after the trigger - adjust by the length difference
-          newCursorPosition = currentCursorPosition + lengthDifference
+        // Only proceed if the current content matches our expected state
+        if (originalTextContent === content) {
+          // Direct text replacement
+          editorRef.current.textContent = newContent
+          
+          // Calculate new cursor position
+          let newCursorStart = currentSelection.start
+          let newCursorEnd = currentSelection.end
+          
+          // If cursor was after the trigger, adjust for length difference
+          if (currentSelection.start > targetTrigger.position + targetTrigger.text.length) {
+            newCursorStart = currentSelection.start + lengthDifference
+            newCursorEnd = currentSelection.end + lengthDifference
+          }
+          // If cursor was within the trigger area, place it after the replacement
+          else if (currentSelection.start >= targetTrigger.position && currentSelection.start <= targetTrigger.position + targetTrigger.text.length) {
+            newCursorStart = targetTrigger.position + result.length
+            newCursorEnd = newCursorStart
+          }
+          // If cursor was before the trigger, keep it in the same place
+          // (no adjustment needed)
+          
+          // Restore cursor position with a small delay to ensure DOM is updated
+          setTimeout(() => {
+            if (editorRef.current) {
+              const textNode = editorRef.current.firstChild
+              if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                const range = document.createRange()
+                const selection = window.getSelection()
+                
+                try {
+                  const maxLength = textNode.textContent?.length || 0
+                  const safeStart = Math.min(Math.max(0, newCursorStart), maxLength)
+                  const safeEnd = Math.min(Math.max(0, newCursorEnd), maxLength)
+                  
+                  range.setStart(textNode, safeStart)
+                  range.setEnd(textNode, safeEnd)
+                  selection?.removeAllRanges()
+                  selection?.addRange(range)
+                } catch (error) {
+                  console.warn('Failed to restore cursor position:', error)
+                }
+              }
+            }
+          }, 10)
         } else {
-          // Cursor was within the trigger text - place it after the replacement
-          newCursorPosition = targetTrigger.position + result.length
-        }
-        
-        // Update the content
-        editorRef.current.textContent = newContent
-        
-        // Restore cursor position
-        const range = document.createRange()
-        const selection = window.getSelection()
-        
-        // Find the correct text node and position
-        const textNode = editorRef.current.firstChild
-        if (textNode && textNode.textContent) {
-          const targetPosition = Math.min(Math.max(0, newCursorPosition), textNode.textContent.length)
-          range.setStart(textNode, targetPosition)
-          range.setEnd(textNode, targetPosition)
-          selection?.removeAllRanges()
-          selection?.addRange(range)
+          // Fallback: if content doesn't match, just update and place cursor at end
+          editorRef.current.textContent = newContent
+          const range = document.createRange()
+          const selection = window.getSelection()
+          const textNode = editorRef.current.firstChild
+          if (textNode) {
+            const newPosition = targetTrigger.position + result.length
+            const safePosition = Math.min(newPosition, textNode.textContent?.length || 0)
+            range.setStart(textNode, safePosition)
+            range.setEnd(textNode, safePosition)
+            selection?.removeAllRanges()
+            selection?.addRange(range)
+          }
         }
       }
 
@@ -277,19 +323,34 @@ export default function TextEditor() {
     }
   }, [])
 
+  // Handle dark mode class on document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [darkMode])
+
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-gray-900 dark' : 'bg-gray-100'}`}>
       {/* Main content area with centered document */}
       <div className="max-w-4xl mx-auto px-6 py-8 relative">
         {/* Document page container */}
-        <div className="bg-white rounded-lg shadow-lg border border-gray-200 min-h-[800px] relative overflow-hidden">
+        <div className={`rounded-lg shadow-lg border min-h-[800px] relative overflow-hidden transition-colors duration-300 ${
+          darkMode 
+            ? 'bg-gray-800 border-gray-700' 
+            : 'bg-white border-gray-200'
+        }`}>
           {/* Contenteditable editor */}
           <div
             ref={editorRef}
             contentEditable
             onInput={handleInput}
             onKeyDown={handleKeyDown}
-            className="w-full h-full min-h-[800px] p-12 border-0 outline-none text-gray-900 leading-relaxed"
+            className={`w-full h-full min-h-[800px] p-12 border-0 outline-none leading-relaxed transition-colors duration-300 ${
+              darkMode ? 'text-gray-100' : 'text-gray-900'
+            }`}
             style={{
               fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
               fontSize: '16px',
@@ -305,7 +366,7 @@ export default function TextEditor() {
             href="https://github.com/rkdune/inline-agent" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="absolute bottom-4 left-4 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+            className="absolute bottom-4 left-4 text-gray-400 hover:text-gray-600 transition-colors duration-200 hidden"
             title="View source on GitHub"
           >
             <svg 
@@ -319,12 +380,12 @@ export default function TextEditor() {
             </svg>
           </a>
           
-          {/* Figma icon next to GitHub */}
+          {/* Lightbulb icon next to GitHub */}
           <a 
-            href="YOUR_PNG_URL_HERE" 
+            href="https://raw.githubusercontent.com/rkdune/inline-agent/main/InlineWebAgent.png" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="absolute bottom-4 left-10 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+            className="absolute bottom-4 left-10 text-gray-400 hover:text-gray-600 transition-colors duration-200 hidden"
             title="the figma mockup that started this!"
           >
             <svg 
@@ -334,9 +395,44 @@ export default function TextEditor() {
               fill="currentColor"
               className="opacity-60 hover:opacity-80 transition-opacity duration-200"
             >
-              <path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.02s-1.354-3.02-3.019-3.02h-3.117v6.04zm0 1.471H8.148c-2.476 0-4.49-2.015-4.49-4.49S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.02s1.354 3.02 3.019 3.02h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.02s1.354 3.02 3.019 3.02h3.117v-6.04H8.148zM8.172 24c-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.563 4.539zm-.024-7.51a3.023 3.023 0 0 0-3.019 3.019c0 1.665 1.365 3.019 3.044 3.019 1.705 0 3.093-1.376 3.093-3.068v-2.97H8.148z"/>
+              <path d="M9 21c0 .5.4 1 1 1h4c.6 0 1-.5 1-1v-1H9v1zm3-19C8.1 2 5 5.1 5 9c0 2.4 1.2 4.5 3 5.7V17c0 .5.4 1 1 1h6c.6 0 1-.5 1-1v-2.3c1.8-1.2 3-3.3 3-5.7 0-3.9-3.1-7-7-7z"/>
             </svg>
           </a>
+
+          {/* Dark mode toggle button at bottom right */}
+          <button
+            onClick={toggleDarkMode}
+            className={`absolute bottom-4 right-4 p-2 rounded-lg transition-all duration-200 ${
+              darkMode 
+                ? 'bg-gray-700 hover:bg-gray-600 text-yellow-400' 
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+            }`}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {darkMode ? (
+              // Sun icon for light mode
+              <svg 
+                width="20" 
+                height="20" 
+                viewBox="0 0 24 24" 
+                fill="currentColor"
+                className="transition-transform duration-200 hover:rotate-12"
+              >
+                <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"/>
+              </svg>
+            ) : (
+              // Moon icon for dark mode
+              <svg 
+                width="20" 
+                height="20" 
+                viewBox="0 0 24 24" 
+                fill="currentColor"
+                className="transition-transform duration-200 hover:rotate-12"
+              >
+                <path d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z"/>
+              </svg>
+            )}
+          </button>
         </div>
 
         {/* Bottom status indicators */}
@@ -363,9 +459,13 @@ export default function TextEditor() {
           ) : (
             /* Trigger detection indicator - shows when not typing or processing */
             triggers.length > 0 && (
-              <div className="flex items-center space-x-2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg border border-gray-200 animate-fade-in">
+              <div className={`flex items-center space-x-2 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg border animate-fade-in transition-colors duration-300 ${
+                darkMode 
+                  ? 'bg-gray-800/90 border-gray-700 text-gray-300' 
+                  : 'bg-white/90 border-gray-200 text-gray-600'
+              }`}>
                 <div className="loading-indicator"></div>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm">
                   {triggers.length} trigger{triggers.length !== 1 ? 's' : ''} detected
                 </span>
               </div>
